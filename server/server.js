@@ -4,9 +4,10 @@ const multiparty = require("multiparty")
 const cors = require('cors')
 const app = express();
 const mysql = require('mysql2')
-const PORT = 4000;
-const IMAGE_UPLOAD_DIR = "./public/images"
-const IMAGE_BASE_URL = "http://localhost:4000/images/"
+const PORT = process.env.PORT;
+const SERVER = process.env.SERVER;
+const IMAGE_UPLOAD_DIR = "./public/images/"
+const IMAGE_BASE_URL = `http://localhost:4000/images`
 
 app.use(express.static("public"));
 app.use(cors());
@@ -43,9 +44,18 @@ app.post("/addcontent", (req, res) => {
         console.log(`fields = ${JSON.stringify(fields, null, 2)}`)
         console.log(`files = ${JSON.stringify(files, null, 2)}`)
 
+
         const imagePath = files.image[0].path;
+        console.log('image path : '+imagePath)
         const imageFileName = imagePath.slice(imagePath.lastIndexOf("\\") + 1);
-        const imageURL = IMAGE_BASE_URL + imageFileName;
+        console.log('image file name : '+imageFileName)
+        // const imageURL = IMAGE_BASE_URL + imageFileName;
+        const FULLimageURL = "http://localhost:4000/"+imageFileName;
+        // http://localhost:4000/public/images/file.jpg
+        const splitted = FULLimageURL.split('/public');
+        console.log(splitted)
+        const imageURL = splitted[0]+splitted[1];
+        console.log(imageURL)
 
         const { content_name, content_detail,type } = fields;
         // res.send({ "content_name": content_name, "content_detail": content_detail, "date": new Date(), "image": imageURL })
