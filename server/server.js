@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require("express");
-// const multiparty = require("connect-multiparty")
-// const multipartyMiddleware = multiparty({ uploadDir : './public/images'})
+const multiparty = require("connect-multiparty")
+const multipartyMiddleware = multiparty({ uploadDir : './public/images'})
 const bodyParser = require('body-parser')
 const cors = require('cors')
 const app = express();
@@ -35,6 +35,25 @@ connection.connect((err, result) => {
     console.log("connection to db success")
 });
 
+app.get('/getcontent/:type',(req,res)=>{
+    const type = req.params.type;
+    connection.query(`SELECT
+        content_id,content_name,image,content_detail,type,
+        JSON_ARRAYAGG(
+            JSON_OBJECT(
+                'color',sdg_goal.color,
+                'sdg_number',sdg_number
+            ))
+             AS sdg_number
+        FROM content_sdg
+        LEFT JOIN content ON content.id=content_sdg.content_id
+        LEFT JOIN sdg_goal ON content_sdg.sdg_number=sdg_goal.id
+        WHERE type = ?
+        GROUP BY content_id ORDER BY sdg_number`,[type], function(err,result){
+        if (err) throw err;
+        res.send(result)
+    })
+})
 
 app.post("/upload_files",(req,res)=>{
     if (req.files.length > 0) {
@@ -101,14 +120,15 @@ app.post("/upload",upload.single("image"),(req,res)=>{
         var imgsrc = `${process.env.SERVER}/`+req.file.filename
         var content_name = req.body.content_name;
         var content_detail = req.body.content_detail;
+        var type = req.body.contentType;
         const sdgFrontEnd = req.body.sdgID
         const sdgID=sdgFrontEnd.split(',').map(x=>+x);
-        
+
         // b="1,2,3,4".split(',').map(x=>+x)
         console.log(sdgID)
         console.log(content_name,content_detail)
-        var insertData = "INSERT INTO content (content_name,content_detail,image) VALUES(?,?,?)"
-        connection.query(insertData,[content_name,content_detail,imgsrc],(err,result)=>{
+        var insertData = "INSERT INTO content (content_name,content_detail,image,type) VALUES(?,?,?,?)"
+        connection.query(insertData,[content_name,content_detail,imgsrc,type],(err,result)=>{
             if (err){
                 throw err  
             } else {
@@ -133,6 +153,39 @@ app.post("/upload",upload.single("image"),(req,res)=>{
     }
 })
 
+
+
+
+app.get('/getall',(req,res)=> {
+    // Test JSON Array to extract 2 fields sdg_number and color of sdg_number
+
+    // connection.query(`SELECT
+    //     content_id,content_name,image,content_detail,
+    //     JSON_ARRAYAGG(sdg_number) as sdg_number,JSON_ARRAYAGG(sdg_goal.color) as color
+    //     FROM content_sdg
+    //     LEFT JOIN content ON content.id=content_sdg.content_id
+    //     LEFT JOIN sdg_goal ON content_sdg.sdg_number=sdg_goal.id
+    //     GROUP BY content_id `, function(err,result){
+    //     if (err) throw err;
+    //     res.send(result)
+    // })
+
+    connection.query(`SELECT
+        content_id,content_name,image,
+        JSON_ARRAYAGG(
+            JSON_OBJECT(
+                'color',sdg_goal.color,
+                'sdg_number',sdg_number
+            ))
+             AS sdg_number
+        FROM content_sdg
+        LEFT JOIN content ON content.id=content_sdg.content_id
+        LEFT JOIN sdg_goal ON content_sdg.sdg_number=sdg_goal.id
+        GROUP BY content_id `, function(err,result){
+        if (err) throw err;
+        res.send(result)
+    })
+})
 // app.post("/upload",upload.single("image"),(req,res)=>{
 //     if (!req.file) {
 //         console.log("No file upload");
@@ -187,13 +240,14 @@ app.get('/content', (req, res) => {
 // })
 // const upload = multer({ storage: storege});
 
-// app.post('/upload',upload.single("file"),(req,res)=>{
-//     let form = new multiparty.Form({uploadDir : IMAGE_UPLOAD_DIR});
-//     form.parse(req,function(err,fields,files){
-//         if (err ) return res.send({ err : err.messageq});
-//         console.log(`fields= ${JSON.stringify(fields,null,2)}`)
-//     })
-// })
+app.post('/uploadck',multipartyMiddleware,(req,res)=>{
+    // let form = new multiparty.Form({uploadDir : IMAGE_UPLOAD_DIR});
+    // form.parse(req,function(err,fields,files){
+    //     if (err ) return res.send({ err : err.messageq});
+    //     console.log(`fields= ${JSON.stringify(fields,null,2)}`)
+    // })
+    console.log(req.files)
+})
 
 app.post("/addcontent",(req,res)=>{
     // let form = new multiparty.Form({ uploadDir : IMAGE_UPLOAD_DIR});
