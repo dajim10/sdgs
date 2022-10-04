@@ -12,15 +12,32 @@ const PORT = process.env.PORT;
 const SERVER = process.env.SERVER;
 const IMAGE_UPLOAD_DIR = "./public/images/"
 const IMAGE_BASE_URL = process.env.IMAGEURL;
-
+const fs = require('fs')
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({ extended: false}))
 
+var storage = multer.diskStorage({
+    destination: (req,file,callBack) =>{
+        callBack(null,'./public')
+    },
+    filename: (req,file,callBack) => {
+        callBack(null,Date.now() + path.extname(file.originalname))
+    }
+})
 
+var upload = multer({
+    storage : storage
+})
 
 
 app.use(express.static("./public"));
 app.use(cors());
+// app.use([
+//     express.static("public"),
+//     express.json(),
+//     cors(),
+//     upload.array("files")
+// ])
 
 const connection = mysql.createConnection({
     host: process.env.HOST,
@@ -34,6 +51,7 @@ connection.connect((err, result) => {
     if (err) throw err;
     console.log("connection to db success")
 });
+
 
 app.get('/getcontent/:type',(req,res)=>{
     const type = req.params.type;
@@ -55,10 +73,115 @@ app.get('/getcontent/:type',(req,res)=>{
     })
 })
 
-app.post("/upload_files",(req,res)=>{
-    if (req.files.length > 0) {
-        res.json(req.files[0]);
+app.get('/getcontentbytype/:type',(req,res)=>{
+    const type = req.params.type;
+    connection.query(`SELECT
+        content_id,content_name,image,content_detail,type,
+        JSON_ARRAYAGG(
+            JSON_OBJECT(
+                'color',sdg_goal.color,
+                'sdg_number',sdg_number
+            ))
+             AS sdg_number
+        FROM content_sdg
+        LEFT JOIN content ON content.id=content_sdg.content_id
+        LEFT JOIN sdg_goal ON content_sdg.sdg_number=sdg_goal.id
+        WHERE type = ?
+        GROUP BY content_id ORDER BY sdg_number`,[type], function(err,result){
+        if (err) throw err;
+        res.send(result)
+    })
+})
+
+app.get('/contentsdg/:sdg_number',(req,res)=>{
+    const sdg_number = req.params.sdg_number;
+    sqlQuery = `SELECT content_id ,  content_name ,image ,content_detail, type ,sdg_number
+    FROM content
+    LEFT JOIN  content_sdg ON content.id=content_sdg.content_id
+    WHERE content_sdg.sdg_number = ?
+    `
+    connection.query(sqlQuery,[sdg_number],(err,result)=>{
+        if (err) throw err;
+        res.send(result)
+    })
+
+
+
+    // connection.query(`SELECT
+    //     content_id,content_name,image,content_detail,type,
+    //     JSON_ARRAYAGG(
+    //         JSON_OBJECT(
+    //             'color',sdg_goal.color,
+    //             'sdg_number',sdg_number
+    //         ))
+    //          AS sdg_number
+    //     FROM content_sdg
+    //     LEFT JOIN content ON content.id=content_sdg.content_id
+    //     LEFT JOIN sdg_goal ON content_sdg.sdg_number=sdg_goal.id
+    //     WHERE content_sdg.sdg_number = ?
+    //     GROUP BY content_id ORDER BY sdg_number`,[sdg_number], function(err,result){
+    //     if (err) throw err;
+    //     res.send(result)
+    // })
+})
+
+app.post("/upload_files",multipartyMiddleware,(req,res)=>{
+    // console.log(req.files)
+    // if(req.files) {
+    //     res.json(req.files.path)
+    // }
+
+    // console.log(req.files.files.path);
+    var TempFile = req.files.files;
+    var TempPathfile = TempFile.path;
+
+    // console.log(filename)
+   console.log(TempFile)
+    const fileSplit = TempPathfile.split("public/")
+    const filename = fileSplit[1]
+
+    console.log(TempPathfile)
+    console.log(filename)
+    const targetPathUrl = path.join(__dirname,`${TempPathfile}`);
+    
+    // fs.rename(TempPathfile,targetPathUrl, err=>{
+        res.status(200).json({
+            uploaded:true,
+            url:`${TempPathfile}`,
+            filename:filename,
+            //filename: req.files.files.name,
+        })
+        // if(err) return console.log(err);
+    // })
+   
+})
+
+app.post("/update/:id",(req,res)=>{
+    
+    const id = req.params.id
+    let form = req.body
+    console.log(form)
+
+    if (form !== 'undefined') {
+        res.send(form)
     }
+    // // const contentDetail = req.body.content_detail
+
+    // // console.log(contentDetail)
+
+    // const contentDetail = '<img src="http://localhost:4000/1I51uBGhrQOArW95GXnQTOr2.jpeg />'
+    // connection.query('UPDATE `content` SET `content_detail`=? where `id`=?', [req.body.content_detail,,id], function (error, results, fields) {
+    //     if (error) throw error;
+    //     res.send(JSON.stringify(results));
+    //   });
+    
+    // connection.query(`UPDATE content SET content_detail = ? WHERE id = ?`,[contentDetail,id],
+    // function (error, results, fields) {
+    //     if (error) throw error;
+    //     res.end(JSON.stringify(results));
+    //   })
+
+    // res.send(`Send request by id ${id}`)
 })
 
 app.get("/sdgs",(req,res)=> {
@@ -66,19 +189,6 @@ app.get("/sdgs",(req,res)=> {
         if (err) throw err;
         res.send(result);
     })
-})
-// ! Use of Multer
-var storage = multer.diskStorage({
-    destination: (req,file,callBack) =>{
-        callBack(null,'./public')
-    },
-    filename: (req,file,callBack) => {
-        callBack(null,Date.now() + path.extname(file.originalname))
-    }
-})
-
-var upload = multer({
-    storage : storage
 })
 
 
@@ -101,14 +211,15 @@ app.get("/content/:id",(req,res)=>{
     })
 })
 
-app.post("/update/:id",upload.array("image"),(req,res)=>{
+app.post("/upload/:id",upload.array("image"),(req,res)=>{
     const id = req.params.id;
-    if (!id) {
-        res.status(400).send({message:"error 404 "})
-    }else {
+    console.log(req.file)
+    // if (!id) {
+    //     res.status(400).send({message:"error 404 "})
+    // }else {
 
-        console.log(req.params.id);
-    }
+    //     res.json({ success:true,url:res.req.file.path,fileName:res.req.file.filename})
+    // }
 })
 
 app.post("/upload",upload.single("image"),(req,res)=>{
@@ -186,6 +297,28 @@ app.get('/getall',(req,res)=> {
         res.send(result)
     })
 })
+
+app.get('/getcontentbyid/:id',(req,res)=> {
+    const id = req.params.id;
+    connection.query(`SELECT
+        content_id,content_name,image,content_detail,
+        JSON_ARRAYAGG(
+            JSON_OBJECT(
+                'color',sdg_goal.color,
+                'sdg_number',sdg_number
+            ))
+             AS sdg_number
+        FROM content_sdg
+        LEFT JOIN content ON content.id=content_sdg.content_id
+        LEFT JOIN sdg_goal ON content_sdg.sdg_number=sdg_goal.id
+        WHERE content_id = ?
+        GROUP BY content_id `,[id], function(err,result){
+        if (err) throw err;
+        res.send(result);
+    })
+})
+
+
 // app.post("/upload",upload.single("image"),(req,res)=>{
 //     if (!req.file) {
 //         console.log("No file upload");
@@ -203,19 +336,7 @@ app.get('/getall',(req,res)=> {
 // })
 
 
-// app.post('/insertdata',(req,res) =>{
-//     console.log(req);
-//     const content_name = req.body.content_name;
-//     const image = req.files;
-//     const content_detail = req.body.content_detail;
-    
 
-//     connection.query("INSERT INTO content (content_name,image,content_detail) VALUES (?,?,?)",[content_name,image,content_detail],(err,result)=>{
-//         if (err) throw err;
-//         res.send(result)
-
-//     })
-// })
 app.get('/content', (req, res) => {
     connection.query("SELECT * FROM content ORDER BY ID DESC ", (err, result, fields) => {
         if (err) throw err;
@@ -228,26 +349,7 @@ app.get('/content', (req, res) => {
 
 
 
-// upload image with multer
-// const multer = require('multer');
-// var storege = multer.diskStorage({
-//     destination: function (req,file,cb) {
-//         cb(null,"./public/images");
-//     },
-//     filename : (req,file,cb) => {
-//         cb(null,Date.now()+"--"+file.originalname);
-//     },
-// })
-// const upload = multer({ storage: storege});
 
-app.post('/uploadck',multipartyMiddleware,(req,res)=>{
-    // let form = new multiparty.Form({uploadDir : IMAGE_UPLOAD_DIR});
-    // form.parse(req,function(err,fields,files){
-    //     if (err ) return res.send({ err : err.messageq});
-    //     console.log(`fields= ${JSON.stringify(fields,null,2)}`)
-    // })
-    console.log(req.files)
-})
 
 app.post("/addcontent",(req,res)=>{
     // let form = new multiparty.Form({ uploadDir : IMAGE_UPLOAD_DIR});
@@ -256,43 +358,7 @@ app.post("/addcontent",(req,res)=>{
     res.status(200).send();
 })
 
-//
-// app.post("/addcontent",(req, res) => {
-//     let form = new multiparty.Form({ uploadDir: IMAGE_UPLOAD_DIR });
 
-//     form.parse(req, function (err, fields, files) {
-//         if (err) return res.send({ err: err.message });
-//         console.log(`fields = ${JSON.stringify(fields, null, 2)}`)
-//         console.log(`files = ${JSON.stringify(files, null, 2)}`)
-
-
-//         const imagePath = files.images[0].path;
-//         console.log('image path : '+imagePath)
-//         const imageFileName = imagePath.slice(imagePath.lastIndexOf("\\") + 1);
-//         console.log('image file name : '+imageFileName)
-//         // const imageURL = IMAGE_BASE_URL + imageFileName;
-//         const FULLimageURL = `${SERVER}/${imageFileName}`
-//         // const FULLimageURL = "http://localhost:4000/"+imageFileName;
-//         // http://localhost:4000/public/images/file.jpg
-//         const splitted = FULLimageURL.split('/public');
-//         console.log(splitted)
-//         const imageURL = splitted[0]+splitted[1];
-//         console.log(imageURL)
-
-//         const { content_name, content_detail,type } = fields;
-//         // console.log(content_detail)
-//         // res.send({ "content_name": content_name, "content_detail": content_detail, "date": new Date(), "image": imageURL })
-//         const InsertMysql = "INSERT INTO content(content_name,content_detail,date,image,type) VALUES (?,?,?,?,?)"
-//         connection.query(InsertMysql, [content_name, content_detail, date = new Date(), imageURL,type], (err, result,fields) => {
-//             if (err) throw err;
-//                 const lastId = result.insertId
-//             res.send(result)
-//             console.log(lastId)
-
-//             // res.send(insertId)
-//         })
-//     })
-// })
 
 app.listen(PORT, () => {
     console.log(`Server running at : http://localhost:${PORT}`)
