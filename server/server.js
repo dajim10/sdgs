@@ -52,6 +52,12 @@ connection.connect((err, result) => {
     console.log("connection to db success")
 });
 
+// Root
+
+// app.get('/',(req,res)=>{
+//     res.sendFile(path.join(__dirname,'./public/build/index.html'))
+// })
+
 
 app.get('/getcontent/:type',(req,res)=>{
     const type = req.params.type;
@@ -268,21 +274,10 @@ app.post("/upload",upload.single("image"),(req,res)=>{
 
 
 app.get('/getall',(req,res)=> {
-    // Test JSON Array to extract 2 fields sdg_number and color of sdg_number
-
-    // connection.query(`SELECT
-    //     content_id,content_name,image,content_detail,
-    //     JSON_ARRAYAGG(sdg_number) as sdg_number,JSON_ARRAYAGG(sdg_goal.color) as color
-    //     FROM content_sdg
-    //     LEFT JOIN content ON content.id=content_sdg.content_id
-    //     LEFT JOIN sdg_goal ON content_sdg.sdg_number=sdg_goal.id
-    //     GROUP BY content_id `, function(err,result){
-    //     if (err) throw err;
-    //     res.send(result)
-    // })
+    
 
     connection.query(`SELECT
-        content_id,content_name,image,
+        content_id,content_name,image,type,content_detail,
         JSON_ARRAYAGG(
             JSON_OBJECT(
                 'color',sdg_goal.color,
@@ -301,7 +296,7 @@ app.get('/getall',(req,res)=> {
 app.get('/getcontentbyid/:id',(req,res)=> {
     const id = req.params.id;
     connection.query(`SELECT
-        content_id,content_name,image,content_detail,
+        content_id,content_name,image,content_detail,type,
         JSON_ARRAYAGG(
             JSON_OBJECT(
                 'color',sdg_goal.color,
